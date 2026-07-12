@@ -1,0 +1,224 @@
+using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
+
+class TicketInfo
+{
+    public GameObject ticket;
+    public Recipe recipe;
+}
+
+public class AddOrders : MonoBehaviour
+{
+    public GameObject orderTicket;
+    public Transform bulletinBoard;
+    public Vector2 spawnRange = new Vector2(1f, 10f);
+
+    private float spawnInterval;
+    public int maxTickets = 8;
+    public int ticketsPerRow = 4;
+    public Vector3 ticketRotationOffset = new Vector3(0f, 0f, 0f);
+    private Vector2 boardSize;
+    private float ticketWidth;
+    private float ticketHeight;
+    private float ticketZOffset;
+    private float paddingx;
+    private float paddingy;
+    private Vector3 ticketLocalScale = Vector3.one;
+
+    private List<Vector2> occupiedSlots = new List<Vector2>();
+    private List<TicketInfo> activeTickets = new List<TicketInfo>();
+    private float spawnTimer = 0f;
+
+    void Awake()
+    {
+        spawnInterval = 5f;
+    }
+
+    void Start()
+    {
+        RecipeManager.Instance.OnOrderAdded += TrySpawnTicket;
+        RecipeManager.Instance.OnOrderCompleted += RemoveTicket;
+        RecipeManager.Instance.OnOrderExpired += RemoveTicket;
+        InitializePositions();
+    }
+
+    void InitializePositions()
+    {
+        // Collider boardCollider = bulletinBoard.GetComponent<Collider>();
+        // Renderer boardRenderer = bulletinBoard.GetComponent<Renderer>();
+        // if (boardCollider != null)
+        // {
+        //     Vector3 worldSize = boardCollider.bounds.size;
+        //     boardSize = new Vector3(Mathf.Abs(worldSize.x), Mathf.Abs(worldSize.y), Mathf.Abs(worldSize.z));
+        // }
+        // if (boardRenderer != null)
+        // {
+        //     Vector3 worldSize = boardRenderer.bounds.size;
+        //     boardSize = new Vector3(Mathf.Abs(worldSize.x), Mathf.Abs(worldSize.y), Mathf.Abs(worldSize.z));
+        // }
+        // else
+        // {
+        //     Debug.LogWarning("Bulletin board has no Collider or Renderer. Falling back to default board size");
+        //     boardSize = new Vector3(4f, 3f, .1f);
+        // }
+        BoxCollider col = bulletinBoard.GetComponent<BoxCollider>();
+        boardSize.x = col.size.y * Mathf.Abs(bulletinBoard.localScale.y);
+        boardSize.y = col.size.z * Mathf.Abs(bulletinBoard.localScale.z);
+        boardSize += new Vector2(.5f, .3f);
+        paddingx = boardSize.x / 24f;
+        paddingy = boardSize.y / 24f;
+        ticketWidth = (boardSize.x - (3 * paddingx)) / ticketsPerRow;
+        ticketHeight = (boardSize.y - (5 * paddingy)) / 2;
+
+        GameObject tempTicket = Instantiate(orderTicket, Vector3.zero, Quaternion.Euler(0, 0, -90f));
+
+        Collider ticketCollider = tempTicket.GetComponent<Collider>();
+        Renderer ticketRenderer = tempTicket.GetComponent<Renderer>();
+
+        float ticketDepth;
+
+        if (ticketCollider != null || ticketRenderer != null)
+        {
+            Vector3 worldSize = (ticketCollider != null) ? ticketCollider.bounds.size : ticketRenderer.bounds.size;
+
+            Vector3 prefabLocalScale = tempTicket.transform.localScale;
+
+            float baseWidth = Mathf.Max(0.0001f, worldSize.x);
+            float baseHeight = Mathf.Max(0.0001f, worldSize.y);
+
+            // Swap axes: make the prefab's X localScale correspond to ticketHeight (position Y)
+            // and the prefab's Y localScale correspond to ticketWidth (position X).
+            Vector3 scaleFactor = new Vector3(ticketHeight / baseWidth, ticketWidth / baseHeight, 1f);
+            Vector3 finalScale = new Vector3(scaleFactor.x * tempTicket.transform.localScale.x, scaleFactor.y * tempTicket.transform.localScale.y, scaleFactor.z * tempTicket.transform.localScale.z);
+            Vector3 localSize = bulletinBoard.InverseTransformVector(worldSize);
+            ticketDepth = Mathf.Abs(localSize.z) * 2f;
+            if (ticketDepth <= 0f)
+                ticketDepth = Mathf.Min(Mathf.Abs(localSize.x), Mathf.Abs(localSize.y));
+            tempTicket.transform.localScale = finalScale;
+            ticketLocalScale = finalScale;
+            Debug.Log(
+                $"baseWidth:    {baseWidth:F4}\n" +
+                $"baseHeight:   {baseHeight:F4}\n" +
+                $"scaleFactor:  {scaleFactor:F4}\n" +
+                $"finalScale:   {finalScale:F4}"
+            );
+        }
+        else
+        {
+            Debug.LogWarning("Could not measure ticket depth. Using fallback.");
+            ticketDepth = 0.01f;
+        }
+        ticketZOffset = (ticketDepth / 2f) + 0.001f;
+
+        Destroy(tempTicket);
+    }
+
+    void Update()
+    {
+        spawnTimer += Time.deltaTime;
+
+        if (spawnTimer >= spawnInterval)
+        {
+            spawnTimer = 0f;
+            spawnInterval = GetSpawnInterval();
+            RecipeManager.Instance.SpawnOrder();
+        }
+    }
+    void TrySpawnTicket(Recipe recipe)
+    {
+        if (activeTickets.Count >= maxTickets)
+        {
+            return;
+        }
+
+        Vector2 slot = FindAvailableSlot();
+
+        if (float.IsInfinity(slot.x) || float.IsInfinity(slot.y) || float.IsNaN(slot.x) || float.IsNaN(slot.y))
+        {
+            Debug.LogWarning("No valid slot returned. Skipping spawn.");
+            return;
+        }
+
+        PlaceTicket(slot, recipe);
+    }
+
+    Vector2 FindAvailableSlot()
+    {
+        float stepX = ticketWidth + paddingx;
+        float stepY = ticketHeight + 5 * paddingy;
+
+        float startX = ((-boardSize.x) / 2f) + (ticketWidth / 2f) - 0.02f;
+        float startY =  (boardSize.y / 2f) - (ticketHeight / 2f);
+
+        for (float y = startY; y > ((-boardSize.y) / 2f); y -= stepY)
+        {
+            for (float x = startX; x <= (boardSize.x / 2f); x += stepX)
+            {
+                Vector2 candidate = new Vector2(y, -x);
+                if (!IsSlotOccupied(candidate))
+                    return candidate;
+            }
+        }
+        return Vector2.negativeInfinity;
+    }
+
+    bool IsSlotOccupied(Vector2 candidate)
+    {
+        foreach (Vector2 slot in occupiedSlots)
+        {
+            if (Vector2.Distance(candidate, slot) < ticketWidth * 0.9f)
+                return true;
+        }
+        return false;
+    }
+
+    void PlaceTicket(Vector2 localSlot, Recipe recipe)
+    {
+        Vector3 localPos = new Vector3(-ticketZOffset - 0.5f, localSlot.y, localSlot.x);
+        Vector3 worldPos = bulletinBoard.TransformPoint(localPos);
+
+        // Vector3 boardNormal = bulletinBoard.forward;
+        // Vector3 boardUp     = bulletinBoard.up;
+
+        // Quaternion surfaceRotation = Quaternion.LookRotation(boardNormal, boardUp);
+        // Quaternion finalRotation = surfaceRotation * Quaternion.Euler(ticketRotationOffset);
+
+        GameObject ticket = Instantiate(orderTicket, worldPos, Quaternion.Euler(0, 0, 90f));
+        ticket.GetComponent<OrderTicket>().SetRecipe(recipe);
+        ticket.transform.SetParent(bulletinBoard);
+        ticket.transform.localScale = ticketLocalScale;
+
+        occupiedSlots.Add(localSlot);
+        TicketInfo info = new TicketInfo();
+        info.ticket = ticket;
+        info.recipe = recipe;
+
+        activeTickets.Add(info);
+    }
+
+    public void RemoveTicket(Recipe recipe)
+    {
+        int index = activeTickets.FindIndex(t => t.recipe == recipe);
+        if (index < 0) return;
+
+        Destroy(activeTickets[index].ticket);
+        occupiedSlots.RemoveAt(index);
+        activeTickets.RemoveAt(index);
+    }
+
+    public void ClearAllTickets()
+    {
+        foreach (TicketInfo t in activeTickets)
+            Destroy(t.ticket);
+
+        activeTickets.Clear();
+        occupiedSlots.Clear();
+    }
+
+    public float GetSpawnInterval()
+    {
+        return UnityEngine.Random.Range(spawnRange.x, spawnRange.y);
+    }
+
+}

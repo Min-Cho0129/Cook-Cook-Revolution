@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c1783220964ad46fa92af4d63002876d, type: 3}
+  m_Name: Breakfast Burger
+  m_EditorClassIdentifier: Assembly-CSharp::Recipe
+  recipeName: Breakfast Burger
+  requiredLayers:
+  - {fileID: 11400000, guid: 51b4595cd03174e2ea0c1e5e7b1c69ac, type: 2}
+  - {fileID: 11400000, guid: 38fc4b2998fc4433f9514a8425c0b46e, type: 2}
+  - {fileID: 11400000, guid: 3ca45de3b305f4275bc40b338c63272b, type: 2}
+  - {fileID: 11400000, guid: 8b2bdc0106ab7475096207f29bf963e0, type: 2}
+  - {fileID: 11400000, guid: 2792314700aa04dcd86907f1615fb7f2, type: 2}
+  scoreValue: 150
+  timeLimit: 110
