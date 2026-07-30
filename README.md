@@ -2,8 +2,6 @@
 
 Cook Cook Revolution is a VR cooking game built in Unity. Players prepare ingredients with hand-tracked or controller-based interactions, cook food on a stove, assemble orders, and serve completed dishes before the timer runs out.
 
-![Cook Cook Revolution start screen](docs/screenshots/overview-start-screen.png)
-
 ## Overview
 
 The game is designed for VR play. It uses Unity's XR Interaction Toolkit so the main interaction model is reaching, grabbing, chopping, cooking, plating, and serving objects directly in 3D space.
